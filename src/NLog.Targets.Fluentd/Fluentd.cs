@@ -20,6 +20,7 @@ using System.IO;
 using System.Text;
 using System.Net.Sockets;
 using System.Diagnostics;
+using System.Linq;
 using System.Reflection;
 using NLog;
 using MsgPack;
@@ -110,7 +111,7 @@ namespace NLog.Targets
             }
         }
 
-        public void UnpackTo(Unpacker unpacker, IDictionary<string, object> collection)
+        public new void UnpackTo(Unpacker unpacker, IDictionary<string, object> collection)
         {
             long mapLength;
             if (!unpacker.ReadMapLength(out mapLength))
@@ -127,7 +128,7 @@ namespace NLog.Targets
             return retval;
         }
 
-        public void UnpackTo(Unpacker unpacker, object collection)
+        public new void UnpackTo(Unpacker unpacker, object collection)
         {
             var _collection = collection as IDictionary<string, object>;
             if (_collection == null)
@@ -183,6 +184,8 @@ namespace NLog.Targets
         public int LingerTime { get; set; }
 
         public bool EmitStackTraceWhenAvailable { get; set; }
+
+        public bool UseDictionary { get; set; }
 
         private TcpClient client;
 
@@ -245,12 +248,27 @@ namespace NLog.Targets
 
         protected override void Write(LogEventInfo logEvent)
         {
-            var record = new Dictionary<string, object> {
-                { "level", logEvent.Level.Name },
-                { "message", Layout.Render(logEvent) },
-                { "logger_name", logEvent.LoggerName },
-                { "sequence_id", logEvent.SequenceID },
-            };
+            IDictionary<string, object> record = new Dictionary<string, object>();
+            if (UseDictionary && logEvent.Parameters.Any())
+            {
+                try
+                {
+                    record = (IDictionary<string, object>)logEvent.Parameters[0];
+                }
+                catch (Exception exception)
+                {
+                    Debug.WriteLine($"{exception.Message}, {exception.StackTrace}");
+                }
+            }
+            else
+            {
+                record.Add("message", Layout.Render(logEvent));
+            }
+
+            record.Add("level", logEvent.Level.Name);
+            record.Add("logger_name", logEvent.LoggerName);
+            record.Add("sequence_id", logEvent.SequenceID);
+
             if (EmitStackTraceWhenAvailable && logEvent.HasStackTrace)
             {
                 var transcodedFrames = new List<Dictionary<string, object>>();
@@ -271,16 +289,7 @@ namespace NLog.Targets
                 record.Add("stacktrace", transcodedFrames);
             }
             EnsureConnected();
-            if (this.emitter != null)
-            {
-                try
-                {
-                    this.emitter.Emit(logEvent.TimeStamp, Tag, record);
-                }
-                catch (Exception e)
-                {
-                }
-            }
+            this.emitter?.Emit(logEvent.TimeStamp, Tag, record);
         }
 
         public Fluentd()
