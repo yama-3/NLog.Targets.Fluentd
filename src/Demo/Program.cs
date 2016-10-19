@@ -30,12 +30,20 @@ namespace Demo
             var config = new NLog.Config.LoggingConfiguration();
             using (var fluentdTarget = new NLog.Targets.Fluentd())
             {
+                fluentdTarget.UseDictionary = true;
                 fluentdTarget.Layout = new NLog.Layouts.SimpleLayout("${longdate}|${level}|${callsite}|${logger}|${message}");
                 config.AddTarget("fluentd", fluentdTarget);
                 config.LoggingRules.Add(new NLog.Config.LoggingRule("demo", LogLevel.Debug, fluentdTarget));
                 var loggerFactory = new LogFactory(config);
                 var logger = loggerFactory.GetLogger("demo");
-                logger.Info("Hello World!");
+                logger.Info(new Dictionary<string, object>
+                {
+                    { "message", "Hello World!" },
+                    { "val1", 1 },
+                    { "val2", 1.0 },
+                    { "val3", true },
+                    { "val4", new[] { 1, 2, 3, 4, 5 } }
+                });
             }
         }
     }
